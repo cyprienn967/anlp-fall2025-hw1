@@ -48,8 +48,11 @@ class LoRALayer(nn.Module):
             Output tensor of shape (batch, seq, out_features)
         """
         # todo
-        raise NotImplementedError
-
+        original = self.original_layer(x)
+        down_proj = F.linear(x, self.lora_A.to(x.dtype))
+        up_proj = F.linear(down_proj, self.lora_b.to(x.dtype))
+        up_proj = self.scaling * up_proj 
+        return original + up_proj
 
 
 def apply_lora(model, rank=4, alpha=1.0):
