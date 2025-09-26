@@ -43,7 +43,9 @@ class LayerNorm(torch.nn.Module):
             torch.Tensor: The normalized tensor.
         """
         # todo
-        raise NotImplementedError
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        return (x-mean)/torch.sqrt(var+self.eps)
 
     def forward(self, x):
         """
@@ -93,8 +95,12 @@ class Attention(nn.Module):
         Make sure to use attention_dropout (self.attn_dropout) on the computed
         attention matrix before applying it to the value tensor.
         '''
-        # todo
-        raise NotImplementedError
+        bs, n_h, T, d = query.shape
+        scores = torch.matmul(query, key.transpose(-2, -1))/math.sqrt(self.head_dim)
+        attn = F.softmax(scores, dim=-1)
+        attn = self.attn_dropout(attn)
+        output = torch.matmul(attn, value)
+        return output
 
     def forward(
         self,
