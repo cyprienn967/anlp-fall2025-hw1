@@ -48,8 +48,9 @@ def apply_rotary_emb(
         Tuple[torch.Tensor, torch.Tensor]: Tuple of modified query tensor and key tensor with rotary embeddings.
     """
 
-    _, seqlen, _, _ = query.shape
+    bs, seqlen, _, D = query.shape
     device = query.device
+    dtype=query.dtype
     # todo
     #
     # Please refer to Lecture 5 slides in https://cmu-l3.github.io/anlp-fall2025/static_files/anlp-f2025-05-transformers.pdf
@@ -67,18 +68,19 @@ def apply_rotary_emb(
     # Then, combine these trigonometric values with the tensors query_real, query_imag,
     # key_real, and key_imag.
 
-    inv_freqs = 1.0/(theta ** (torch.arange(0, head_dim, 2, device=device).float() / head_dim))
-    pos = torch.arange(seqlen, device=device, dtype=torch.float32).unsqueeze(1)
-    freqs = pos * inv_freqs.unsqueeze(0)
-    cos = torch.cos(freqs).repeat_interleave(2, dim=-1).to(dtype).unsqueeze(0).unsqueeze(2)
-    sin = torch.sin(freqs).repeat_interleave(2, dim=-1).to(dtype).unsqueeze(0).unsqueeze(2)
-    def rot12(x: torch.Tensor):
-      xeven = x[..., 0::2]
-      xodd =x[..., 1::2]
-      y = torch.empty_like(x)
-      y[..., 0::2] = -xodd
-      y[..., 1::2] = xeven
-      return y
-    query_out = (query * cos) + (rot12(query) * sin)
-    key_out = (key * cos) + (rot12(key) * sin)
+    inv_freqs = 1.0/(theta ** (torch.arange(0, head_dim, 2, device=device, dtype=torch.float32).float() / head_dim))
+    pos = torch.arange(seqlen, device=device, dtype=torch.float32)[:, None]
+    angles = pos * inv_freqs[None, :]
+    cos = torch.cos(angles).to(dtype)
+    sin = torch.sin(angles).to(dtype)
+    cosq = reshape_for_broadcast(cos, query_real)
+    sinq = reshape_for_broadcast(sin, query_real)
+    cosk = reshape_for_broadcast(cos, key_real)
+    sink = reshape_for_broadcast(sin, key_real)
+    qrr = query_real * cosq - query_imag * sinq
+    qir = query_real * sinq + query_imag * cosq
+    krr = key_real * cosk - key_imag * sink
+    kir = key_real * sink + key_imag * cosk
+    query_out = torch.stack((qrr, qir), dim=-1).reshape_as(query).type_as(query)
+    key_out = torch.stack((krr, kir), dim=-1).reshape_as(key).type_as(key)
     return query_out, key_out
