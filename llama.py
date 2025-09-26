@@ -42,7 +42,6 @@ class LayerNorm(torch.nn.Module):
         Returns:
             torch.Tensor: The normalized tensor.
         """
-        # todo
         mean = x.mean(dim=-1, keepdim=True)
         var = x.var(dim=-1, keepdim=True, unbiased=False)
         return (x-mean)/torch.sqrt(var+self.eps)
@@ -202,8 +201,12 @@ class LlamaLayer(nn.Module):
         5) add a residual connection from the unnormalized self-attention output to the
            output of the feed-forward network
         '''
-        # todo
-        raise NotImplementedError
+        hai = self.attention_norm(x)
+        ha = self.attention(hai)
+        h = x + ha
+        hfi = self.ffn_norm(h)
+        hf = self.feed_forward(hfi)
+        return h + hf
 
 class Llama(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
@@ -279,12 +282,10 @@ class Llama(LlamaPreTrainedModel):
             # forward the model to get the logits for the index in the sequence
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] # crop to just the final time step
-            # todo
-            raise NotImplementedError
             
             if temperature == 0.0:
                 # select the single most likely index
-                idx_next = None
+                idx_next = torch.argmax(logits, dim=-1, keepdim=True)
             else:
                 '''
                 Perform temperature sampling with epsilon sampling:
@@ -294,7 +295,18 @@ class Llama(LlamaPreTrainedModel):
                 4) Renormalize the filtered probabilities so they sum to 1.
                 5) Sample from this filtered probability distribution.
                 '''
-                idx_next = None
+                logits = logits/temperature
+                probs = F.softmax(logits, dim=-1)
+                keep = probs >= epsilon
+                has_any = keep.any(dim=-1)
+                missing = ~has_any
+                if missing.any():
+                  top1 = probs.argmax(dim=-1)
+                  keep[missing, :] = False
+                  keep[missing, top1[missing]] = True
+                probs = probs * keep
+                probs = probs/probs.sum(dim=-1, keepdim=True)
+                idx_next = torch.multinomial(probs, num_samples=1)
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
         
