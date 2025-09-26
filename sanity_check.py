@@ -5,7 +5,7 @@ seed = 1337
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 
-sanity_data = torch.load("./sanity_check.data")
+sanity_data = torch.load("./sanity_check.data", weights_only=True)
 # text_batch = ["hello world", "hello neural network for NLP"]
 # tokenizer here
 sent_ids = torch.tensor([[101, 7592, 2088, 102, 0, 0, 0, 0],
